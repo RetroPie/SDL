@@ -252,6 +252,9 @@ RPI_vsync_callback(DISPMANX_UPDATE_HANDLE_T u, void *data)
 int
 RPI_CreateWindow(_THIS, SDL_Window * window)
 {
+    const char *hintScale = SDL_GetHint(SDL_HINT_VIDEO_RPI_SCALE_MODE);
+    const char *hintRatio = SDL_GetHint(SDL_HINT_VIDEO_RPI_RATIO);
+    char scalemode = '0';
     SDL_WindowData *wdata;
     SDL_VideoDisplay *display;
     SDL_DisplayData *displaydata;
@@ -261,6 +264,10 @@ RPI_CreateWindow(_THIS, SDL_Window * window)
     DISPMANX_UPDATE_HANDLE_T dispman_update;
     uint32_t layer = SDL_RPI_VIDEOLAYER;
     const char *env;
+    float srcAspect = 1;
+    float dstAspect = 1;
+    int factor_x = 0;
+    int factor_y = 0;
 
     /* Disable alpha, otherwise the app looks composed with whatever dispman is showing (X11, console,etc) */
     dispman_alpha.flags = DISPMANX_FLAGS_ALPHA_FIXED_ALL_PIXELS; 
@@ -275,23 +282,83 @@ RPI_CreateWindow(_THIS, SDL_Window * window)
     display = SDL_GetDisplayForWindow(window);
     displaydata = (SDL_DisplayData *) display->driverdata;
 
-    /* Windows have one size for now */
-    window->w = display->desktop_mode.w;
-    window->h = display->desktop_mode.h;
+    if(hintScale != NULL)
+        scalemode = *hintScale;
 
-    /* OpenGL ES is the law here, buddy */
-    window->flags |= SDL_WINDOW_OPENGL;
+    /* Create a dispmanx element and associate a window to it */
+    switch(scalemode) {
+        case '3':
+            /* Pixel perfect scaling mode. */
+            factor_x = (display->desktop_mode.w / window->w);
+            factor_y = (display->desktop_mode.h / window->h);
+            if ((factor_x != 0) && (factor_y != 0)) {
+                if (factor_x >= factor_y) {
+                    dst_rect.width = window->w * factor_y;
+                    dst_rect.height = window->h * factor_y;
+                }
+                else {
+                    dst_rect.width = window->w * factor_x;
+                    dst_rect.height = window->h * factor_x;
+                }
+                /* Center window. */
+                dst_rect.x = (display->desktop_mode.w - dst_rect.width) / 2;
+                dst_rect.y = (display->desktop_mode.h - dst_rect.height) / 2;
+                break;
+            }
+            /* If integer scale is not possible fallback to mode 1. */
+        case '1':
+            /* Fullscreen mode. */
+            /* Calculate source and destination aspect ratios. */
+            if (hintRatio != NULL)
+                srcAspect = strtof(hintRatio, NULL);
+            else
+                srcAspect = (float)window->w / (float)window->h;
+            /* only allow sensible aspect ratios */
+            if (srcAspect < 0.2f || srcAspect > 6.0f)
+                srcAspect = (float)window->w / (float)window->h;
+            dstAspect = (float)display->desktop_mode.w / (float)display->desktop_mode.h;
+            /* If source and destination aspect ratios are not equal correct destination width. */
+            if (srcAspect < dstAspect) {
+                dst_rect.width = (unsigned)(display->desktop_mode.h * srcAspect);
+                dst_rect.height = display->desktop_mode.h;
+            }
+            else if (srcAspect > dstAspect) {
+                dst_rect.width = display->desktop_mode.w;
+                dst_rect.height = (unsigned)((float)display->desktop_mode.w / srcAspect);
+            }
+            else {
+                dst_rect.width = display->desktop_mode.w;
+                dst_rect.height = display->desktop_mode.h;
+            }
+            /* Center window. */
+            dst_rect.x = (display->desktop_mode.w - dst_rect.width) / 2;
+            dst_rect.y = (display->desktop_mode.h - dst_rect.height) / 2;
+            break;
+        case '2':
+            /* Fullscreen streched mode. */
+            dst_rect.x = 0;
+            dst_rect.y = 0;
+            dst_rect.width = display->desktop_mode.w;
+            dst_rect.height = display->desktop_mode.h;
+            break;
+        default:
+            /* Default mode. */
+            window->w = display->desktop_mode.w;
+            window->h = display->desktop_mode.h;
 
-    /* Create a dispman element and associate a window to it */
-    dst_rect.x = 0;
-    dst_rect.y = 0;
-    dst_rect.width = window->w;
-    dst_rect.height = window->h;
-
+            dst_rect.x = 0;
+            dst_rect.y = 0;
+            dst_rect.width = window->w;
+            dst_rect.height = window->h;
+            break;
+    }
     src_rect.x = 0;
     src_rect.y = 0;
     src_rect.width = window->w << 16;
     src_rect.height = window->h << 16;
+
+    /* OpenGL ES is the law here, buddy */
+    window->flags |= SDL_WINDOW_OPENGL;
 
     env = SDL_GetHint(SDL_HINT_RPI_VIDEO_LAYER);
     if (env) {
