@@ -2387,6 +2387,32 @@ extern "C" {
  */
 #define SDL_HINT_TRACKPAD_IS_TOUCH_ONLY "SDL_TRACKPAD_IS_TOUCH_ONLY"
 
+/**
+ *  \brief Tell dispmanx to stretch the SDL window to fill the display.
+ *
+ * This hint only applies to the RPI video driver.
+ *
+ * The variable can be set to the following values:
+ *   "0"       - Window resolution is desktop resolution.
+ *               This is the behaviour of SDL <= 2.0.4. (default)
+ *   "1"       - Requested video resolution will be scaled to desktop resolution.
+ *               Aspect ratio of requested video resolution will be respected.
+ *   "2"       - Requested video resolution will be scaled to desktop resolution.
+ *   "3"       - Requested video resolution will be scaled to desktop resolution.
+ *               Aspect ratio of requested video resolution will be respected.
+ *               If possible output resolution will be integral multiple of video
+ *               resolution.
+ */
+#define SDL_HINT_VIDEO_RPI_SCALE_MODE    "SDL_VIDEO_RPI_SCALE_MODE"
+
+/**
+ *  \brief Tell dispmanx to set a specific aspect ratio.
+ *
+ * This hint only applies to the RPI video driver.
+ *
+ * Must be set together with SDL_HINT_VIDEO_RPI_SCALE_MODE=1.
+ */
+#define SDL_HINT_VIDEO_RPI_RATIO    "SDL_VIDEO_RPI_RATIO"
 
 /**
  *  \brief  An enumeration of hint priorities
