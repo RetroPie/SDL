@@ -68,6 +68,12 @@ extern int SDL_JoystickGetDeviceIndexFromInstanceID(SDL_JoystickID instance_id);
  */
 extern char *SDL_CreateJoystickName(Uint16 vendor, Uint16 product, const char *vendor_name, const char *product_name);
 
+/* Function to standardize the name for a controller, using a pre-2.0.12 compatible naming.
+   Use it only if access to pre-2.0.12 naming is needed.
+   This should be freed with SDL_free() when no longer needed
+ */
+extern char *SDL_CreateCompatJoystickName(Uint16 vendor, Uint16 product, const char *vendor_name, const char *product_name);
+
 /* Function to create a GUID for a joystick based on the VID/PID and name */
 extern SDL_JoystickGUID SDL_CreateJoystickGUID(Uint16 bus, Uint16 vendor, Uint16 product, Uint16 version, const char *name, Uint8 driver_signature, Uint8 driver_data);
 
