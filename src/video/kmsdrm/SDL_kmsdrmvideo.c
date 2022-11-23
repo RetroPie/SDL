@@ -79,6 +79,13 @@ get_driindex(void)
     DIR *folder;
     const char *hint;
 
+#if SDL_VIDEO_DRIVER_RPI
+        // exit silently if VC4 driver is not active
+        SDL_bool vc4 = (0 == access("/sys/module/vc4/", F_OK));
+        if (!vc4)
+            return -ENOENT;
+#endif
+
     hint = SDL_GetHint(SDL_HINT_KMSDRM_DEVICE_INDEX);
     if (hint && *hint) {
         char *endptr = NULL;
