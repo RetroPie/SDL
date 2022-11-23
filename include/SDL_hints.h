@@ -2414,6 +2414,21 @@ extern "C" {
  */
 #define SDL_HINT_VIDEO_RPI_RATIO    "SDL_VIDEO_RPI_RATIO"
 
+ /**
+  *  \brief  A variable controlling the behavior of SDL_JoystickName
+  *
+  *  Before 2.0.12, 'SDL_CreateJoystickName' would return the same name as reported by UDEV/native OS subsystem.
+  *  Starting with 2.0.12, the naming is no longer identical, the joystick name is modified:
+  *    - vendor names are de-duplicated
+  *    - consecutive spaces are coalesced
+  *    - spaces are trimmed from the start/end
+  *
+  *  This hint can be set one of the following values:
+  *    "0"       - use the current naming
+  *    "1"       - use the pre-2.0.12 naming
+  */
+#define SDL_HINT_JOYSTICK_COMPAT_NAME "SDL_JOYSTICK_COMPAT_NAME"
+
 /**
  *  \brief  An enumeration of hint priorities
  */

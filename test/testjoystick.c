@@ -79,6 +79,7 @@ PrintJoystick(SDL_Joystick *joy)
     }
     SDL_Log("Joystick\n");
     SDL_Log("          name: %s\n", SDL_JoystickName(joy));
+    SDL_Log("   compat name: %s\n", SDL_JoystickCompatName(joy));
     SDL_Log("          type: %s\n", type);
     SDL_Log("           LED: %s\n", SDL_JoystickHasLED(joy) ? "yes" : "no");
     SDL_Log("        rumble: %s\n", SDL_JoystickHasRumble(joy) ? "yes" : "no");

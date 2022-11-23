@@ -196,6 +196,7 @@
 #define SDL_JoystickNameForIndex SDL_JoystickNameForIndex_REAL
 #define SDL_JoystickOpen SDL_JoystickOpen_REAL
 #define SDL_JoystickName SDL_JoystickName_REAL
+#define SDL_JoystickCompatName SDL_JoystickCompatName_REAL
 #define SDL_JoystickGetDeviceGUID SDL_JoystickGetDeviceGUID_REAL
 #define SDL_JoystickGetGUID SDL_JoystickGetGUID_REAL
 #define SDL_JoystickGetGUIDString SDL_JoystickGetGUIDString_REAL
