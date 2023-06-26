@@ -116,7 +116,17 @@ static int get_driindex(void)
                 devindex = SDL_atoi(device + kmsdrm_dri_pathsize +
                                     kmsdrm_dri_devnamesize);
                 if (SDL_KMSDRM_LoadSymbols()) {
-                    drmModeRes *resources = KMSDRM_drmModeGetResources(drm_fd);
+                    drmModeRes *resources;
+#ifdef DRM_CLIENT_CAP_ASPECT_RATIO
+                    /* Expose aspect ratio flags to userspace if available */
+                    if (KMSDRM_drmSetClientCap(drm_fd, DRM_CLIENT_CAP_ASPECT_RATIO, 1)) {
+                        SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "%s%d has no aspect ratio reporting information support.", kmsdrm_dri_cardpath, devindex);
+                        continue;
+                    } else {
+                        SDL_LogDebug(SDL_LOG_CATEGORY_VIDEO, "%s%d supports aspect ratio reporting information.", kmsdrm_dri_cardpath, devindex);
+                    }
+#endif
+                    resources = KMSDRM_drmModeGetResources(drm_fd);
                     if (resources) {
                         SDL_LogDebug(SDL_LOG_CATEGORY_VIDEO,
                                      "%s%d connector, encoder and CRTC counts are: %d %d %d",
@@ -175,6 +185,33 @@ static int get_driindex(void)
     closedir(folder);
 
     return available;
+}
+
+static drmModeModeInfo* connector_find_mode(drmModeConnector *connector, const char *mode_str, const unsigned int vrefresh)
+{
+    short i;
+    drmModeModeInfo *mode;
+    for (i = 0; i < connector->count_modes; i++) {
+        mode = &connector->modes[i];
+        if (!strcmp(mode->name, mode_str)) {
+            /* If the vertical refresh frequency is not specified, then return the first mode that matches by name.
+             * Otherwise, return the mode that matches the name and the specified vertical refresh frequency.
+             */
+            if (vrefresh == 0)
+                return mode;
+            else if (mode->vrefresh == vrefresh)
+                return mode;
+        }
+    }
+
+    return NULL;
+}
+static SDL_bool compare_drm_mode_info(const drmModeModeInfo mode1, const drmModeModeInfo mode2) {
+    if ( mode1.hdisplay == mode2.hdisplay && mode1.vdisplay==mode2.vdisplay && mode1.vrefresh==mode2.vrefresh) {
+        return SDL_TRUE;
+    } else {
+      return SDL_FALSE;
+    }
 }
 
 static int KMSDRM_Available(void)
@@ -681,6 +718,11 @@ static void KMSDRM_AddDisplay(_THIS, drmModeConnector *connector, drmModeRes *re
     int mode_index;
     int i, j;
     int ret = 0;
+    const char *crtc_override = NULL, *mode_line_override = NULL, *mode_id_override = NULL;
+    const char *p;
+    char *hint_video_mode = NULL;
+    uint32_t hint_vrefresh = 0;
+    drmModeModeInfo *override_mode = NULL;
 
     /* Reserve memory for the new display's driverdata. */
     dispdata = (SDL_DisplayData *)SDL_calloc(1, sizeof(SDL_DisplayData));
@@ -762,6 +804,15 @@ static void KMSDRM_AddDisplay(_THIS, drmModeConnector *connector, drmModeRes *re
         }
     }
 
+
+    /* See if there is any CRTC ID override passed in the environment */
+    crtc_override = SDL_getenv("SDL_VIDEO_KMSDRM_CRTCID");
+    if (crtc_override) {
+        SDL_LogDebug(SDL_LOG_CATEGORY_VIDEO,"Override KMS CRTCID hint received (SDL_VIDEO_KMSDRM_CRTCID) - %s", crtc_override);
+        encoder->crtc_id=SDL_atoi(crtc_override);
+        crtc = KMSDRM_drmModeGetCrtc(viddata->drm_fd, encoder->crtc_id);
+    }
+
     if (crtc == NULL) {
         ret = SDL_SetError("No CRTC found for connector.");
         goto cleanup;
@@ -821,6 +872,49 @@ static void KMSDRM_AddDisplay(_THIS, drmModeConnector *connector, drmModeRes *re
     dispdata->mode = crtc->mode;
     dispdata->original_mode = crtc->mode;
     dispdata->fullscreen_mode = crtc->mode;
+
+    /* See if any hints about the CRTCID/MODEID/MODELINE are set by the calling environment
+        - SDL_VIDEO_KMSDRM_MODEID: the Mode ID
+        - SDL_VIDEO_KMSDRM_MODELINE: a video mode specificatied as WxH[@VertRefresh]
+    */
+    mode_id_override = SDL_getenv("SDL_VIDEO_KMSDRM_MODEID");
+    if (mode_id_override) {
+        if ( SDL_atoi(mode_id_override) > connector->count_modes ) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_VIDEO, "Invalid override KMS ModeID received (SDL_VIDEO_KMSDRM_MODEID: %s)", mode_id_override);
+        } else {
+            SDL_LogDebug(SDL_LOG_CATEGORY_VIDEO, "Override KMS ModeID received (SDL_VIDEO_KMSDRM_MODEID: %s)", mode_id_override);
+            if ( !compare_drm_mode_info(dispdata->mode, connector->modes[SDL_atoi(mode_id_override)]) ) {
+                dispdata->mode = connector->modes[SDL_atoi(mode_id_override)];
+            }
+        }
+    }
+
+    mode_line_override = SDL_getenv("SDL_VIDEO_KMSDRM_MODELINE");
+    if (mode_line_override && !mode_id_override) {
+        /* Video mode override, formatted as WxH[@VertRefresh] */
+        SDL_LogDebug(SDL_LOG_CATEGORY_VIDEO, "Override KMS video mode received (SDL_VIDEO_KMSDRM_MODELINE: %s)", mode_line_override);
+
+        p = strchr(mode_line_override, '@');
+        if (p == NULL) {
+            // No hint for refresh rate
+            hint_video_mode = strdup(mode_line_override);
+        } else {
+            hint_video_mode = strndup(mode_line_override, (unsigned int)(p - mode_line_override));
+            hint_vrefresh = strtoul(p + 1, NULL, 10);
+        }
+    }
+
+    if (hint_video_mode) {
+        override_mode = connector_find_mode(connector, hint_video_mode, hint_vrefresh);
+    }
+    if (override_mode) {
+        if ((*override_mode).hdisplay != dispdata->mode.hdisplay ||
+             (*override_mode).vdisplay != dispdata->mode.vdisplay ||
+             (*override_mode).vrefresh != dispdata->mode.vrefresh) {
+            SDL_LogDebug(SDL_LOG_CATEGORY_VIDEO, "Setting initial video mode to %dx%d @ %d",(*override_mode).hdisplay, (*override_mode).vdisplay, (*override_mode).vrefresh);
+            dispdata->mode = (*override_mode);
+        }
+    }
 
     if (dispdata->mode.hdisplay == 0 || dispdata->mode.vdisplay == 0) {
         ret = SDL_SetError("Couldn't get a valid connector videomode.");
