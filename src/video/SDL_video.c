@@ -483,29 +483,8 @@ int SDL_VideoInit(const char *driver_name)
     if (!driver_name) {
         driver_name = SDL_GetHint(SDL_HINT_VIDEODRIVER);
     }
-#if defined(__LINUX__) && defined(SDL_VIDEO_DRIVER_X11)
-    if (!driver_name) {
-        /* See if it looks like we need X11 */
-        SDL_bool force_x11 = SDL_FALSE;
-        void *global_symbols = dlopen(NULL, RTLD_LOCAL|RTLD_NOW);
 
-        /* Use linked libraries to detect what quirks we are likely to need */
-        if (global_symbols != NULL) {
-            if (dlsym(global_symbols, "glxewInit") != NULL) {  /* GLEW (e.g. Frogatto, SLUDGE) */
-                force_x11 = SDL_TRUE;
-            } else if (dlsym(global_symbols, "cgGLEnableProgramProfiles") != NULL) {  /* NVIDIA Cg (e.g. Awesomenauts, Braid) */
-                force_x11 = SDL_TRUE;
-            } else if (dlsym(global_symbols, "_Z7ssgInitv") != NULL) {  /* ::ssgInit(void) in plib (e.g. crrcsim) */
-                force_x11 = SDL_TRUE;
-            }
-            dlclose(global_symbols);
-        }
-        if (force_x11) {
-            driver_name = "x11";
-        }
-    }
-#endif
-    if (driver_name && *driver_name != 0) {
+   if (driver_name && *driver_name != 0) {
         const char *driver_attempt = driver_name;
         while (driver_attempt && *driver_attempt != 0 && !video) {
             const char *driver_attempt_end = SDL_strchr(driver_attempt, ',');
